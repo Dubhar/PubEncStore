@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fetch & Display Stored JSON Data</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 10px; }
+  label { display: block; margin-bottom: 0.25em; font-weight: 600; }
+  input, button { padding: 8px; font-size: 1em; margin-bottom: 1em; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+  th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; }
+  th { background-color: #eee; }
+  #feedback { font-weight: 600; margin-top: 1em; }
+  .error { color: red; }
+  .success { color: green; }
+  pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; }
+</style>
+</head>
+<body>
+
+<h1>Stored Data Viewer</h1>
+
+<label for="privKeyFile">Upload Private Key (.pem):</label>
+<input type="file" id="privKeyFile" accept=".pem" />
+
+<button id="fetchAllBtn">Fetch All Stored Data</button>
+
+<div id="feedback"></div>
+
+<table id="resultsTable" style="display:none;">
+  <thead>
+    <tr>
+      <th>UUID</th>
+      <th>Decrypted JSON Data</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+  const apiUrl = '/api.php';
+  const privKeyFileInput = document.getElementById('privKeyFile');
+  const fetchAllBtn = document.getElementById('fetchAllBtn');
+  const feedback = document.getElementById('feedback');
+  const resultsTable = document.getElementById('resultsTable');
+  const resultsBody = resultsTable.querySelector('tbody');
+
+  fetchAllBtn.addEventListener('click', async () => {
+    feedback.textContent = '';
+    feedback.className = '';
+
+    if (privKeyFileInput.files.length === 0) {
+      feedback.textContent = 'Bitte privaten Schlüssel (.pem) auswählen.';
+      feedback.className = 'error';
+      resultsTable.style.display = 'none';
+      return;
+    }
+
+    const privKeyFile = privKeyFileInput.files[0];
+    const formData = new FormData();
+    formData.append('fetchStored', ''); // empty string means fetch all
+    formData.append('privKey', privKeyFile);
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        feedback.textContent = 'Serverfehler: ' + (data.error || response.statusText);
+        feedback.className = 'error';
+        resultsTable.style.display = 'none';
+        return;
+      }
+
+      if (!Array.isArray(data)) {
+        feedback.textContent = 'Unerwartete Antwort vom Server.';
+        feedback.className = 'error';
+        resultsTable.style.display = 'none';
+        return;
+      }
+
+      if (data.length === 0) {
+        feedback.textContent = 'Keine gespeicherten Daten gefunden.';
+        feedback.className = '';
+        resultsTable.style.display = 'none';
+        return;
+      }
+
+      displayResults(data);
+      feedback.textContent = `Erfolgreich ${data.length} Einträge geladen.`;
+      feedback.className = 'success';
+
+    } catch (err) {
+      feedback.textContent = 'Netzwerkfehler: ' + err.message;
+      feedback.className = 'error';
+      resultsTable.style.display = 'none';
+    }
+  });
+
+  function displayResults(items) {
+    resultsBody.innerHTML = '';
+    for (const item of items) {
+      const tr = document.createElement('tr');
+
+      const uuidTd = document.createElement('td');
+      uuidTd.textContent = item.uuid || '(keine UUID)';
+      tr.appendChild(uuidTd);
+
+      const dataTd = document.createElement('td');
+      if (item.data) {
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(item.data, null, 2);
+        dataTd.appendChild(pre);
+      } else if (item.error) {
+        dataTd.textContent = 'Fehler: ' + item.error;
+        dataTd.style.color = 'red';
+      } else {
+        dataTd.textContent = '-';
+      }
+      tr.appendChild(dataTd);
+
+      resultsBody.appendChild(tr);
+    }
+    resultsTable.style.display = 'table';
+  }
+</script>
+
+</body>
+</html>
+
